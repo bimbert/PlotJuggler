@@ -11,8 +11,6 @@
 #include <QPen>
 
 #include "qwt_plot_zoomer.h"
-#include "qwt_scale_map.h"
-#include "qwt_plot.h"
 #include "PlotJuggler/svg_util.h"
 
 PlotZoomer::PlotZoomer(QWidget* canvas)
@@ -64,7 +62,7 @@ void PlotZoomer::widgetMouseMoveEvent(QMouseEvent* me)
           _zoom_enabled = true;
           this->setRubberBand(RectRubberBand);
           this->setTrackerMode(AlwaysOff);
-          QPen pen(parentWidget()->palette().foreground().color(), 1, Qt::DashLine);
+          QPen pen(parentWidget()->palette().windowText().color(), 1, Qt::DashLine);
           this->setRubberBandPen(pen);
           QApplication::setOverrideCursor(zoom_cursor);
         }
