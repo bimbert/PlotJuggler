@@ -10,8 +10,14 @@
 #include "sbg_parser.h"
 
 DataLoadSBG::DataLoadSBG()
-  : _main_win(nullptr)
+  : _dialog(nullptr)
+  , _ui(nullptr)
+  , _main_win(nullptr)
 {
+//  _dialog = new QDialog();
+//  _ui = new Ui::DataLoadSbg();
+//  _ui->setupUi(_dialog);
+
   for (QWidget* widget : qApp->topLevelWidgets()) {
     if (widget->inherits("QMainWindow")) {
       _main_win = widget;
@@ -46,9 +52,15 @@ bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
   }
 
   // populate timeseries with data
-  for (const auto& it : data) {
+  /*for (const auto& it : data) {
     for (unsigned i = 0; i < SbgParser::DATA_MAX; i++) {
       PlotData::Point point(it.utc/1000.0, it.val[i]);
+      plots_vector[i]->pushBack(point);
+    }
+  }*/
+  for (unsigned i = 0; i < SbgParser::DATA_MAX; ++i) {
+    for (const auto& it : data[i]) {
+      PlotData::Point point(it.utc/1000.0, it.val);
       plots_vector[i]->pushBack(point);
     }
   }

@@ -97,7 +97,7 @@ bool SbgParser::open(const std::string& fileName)
   _refts = 0;
   _refutc = 0;
   _initDone = false;
-  _data.clear();
+  clearData();
 
   errorCode = sbgEComHandle(&_handle);
   if ((errorCode != SBG_NO_ERROR) && (errorCode != SBG_NOT_READY)) {
@@ -111,7 +111,8 @@ bool SbgParser::open(const std::string& fileName)
   _info.insert({ "alt.max", std::to_string(_altMax) });
   _info.insert({ "alt.delta", std::to_string(_altDelta) });
 
-  resetUtcTimestamp();
+//  resetUtcTimestamp();
+  resetTimestamp();
 
   qDebug("done - %s", _utcStr.c_str());
 
@@ -141,7 +142,7 @@ void SbgParser::onEComLogUtc(const SbgBinaryLogData* pLogData)
     _refts = 0;
     _refutc = 0;
     _initDone = false;
-    _data.clear();
+    clearData();
   }
 }
 
@@ -151,14 +152,12 @@ void SbgParser::onEComLogShort(const SbgBinaryLogData* pLogData)
 
   if (!_initDone) return;
 
-  if (_data.empty()) return; // first data after init and no IMU data
-
-  _data.back().val[Dvx] = imuShort.deltaVelocity[0]*DELTA_VEL_LSB;
-  _data.back().val[Dvy] = imuShort.deltaVelocity[1]*DELTA_VEL_LSB;
-  _data.back().val[Dvz] = imuShort.deltaVelocity[2]*DELTA_VEL_LSB;
-  _data.back().val[Dax] = imuShort.deltaAngle[0]*DELTA_ANG_LSB* RAD_2_DEG;
-  _data.back().val[Day] = imuShort.deltaAngle[1]*DELTA_ANG_LSB*RAD_2_DEG;
-  _data.back().val[Daz] = imuShort.deltaAngle[2]*DELTA_ANG_LSB*RAD_2_DEG;
+  _data[Dvx].push_back({imuShort.timeStamp, imuShort.deltaVelocity[0]*DELTA_VEL_LSB});
+  _data[Dvy].push_back({imuShort.timeStamp, imuShort.deltaVelocity[1]*DELTA_VEL_LSB});
+  _data[Dvz].push_back({imuShort.timeStamp, imuShort.deltaVelocity[2]*DELTA_VEL_LSB});
+  _data[Dax].push_back({imuShort.timeStamp, imuShort.deltaAngle[0]*DELTA_ANG_LSB* RAD_2_DEG});
+  _data[Day].push_back({imuShort.timeStamp, imuShort.deltaAngle[1]*DELTA_ANG_LSB*RAD_2_DEG});
+  _data[Daz].push_back({imuShort.timeStamp, imuShort.deltaAngle[2]*DELTA_ANG_LSB*RAD_2_DEG});
 }
 
 void SbgParser::onEComLogImu(const SbgBinaryLogData* pLogData)
@@ -172,11 +171,9 @@ void SbgParser::onEComLogEuler(const SbgBinaryLogData* pLogData)
 
   if (!_initDone) return;
 
-  _data.push_back({ekfEuler.timeStamp,{}});
-
-  _data.back().val[Roll] = ekfEuler.euler[0]*RAD_2_DEG;
-  _data.back().val[Pitch] = ekfEuler.euler[1]*RAD_2_DEG;
-  _data.back().val[Yaw] = ekfEuler.euler[2]*RAD_2_DEG;
+  _data[Roll].push_back({ekfEuler.timeStamp, ekfEuler.euler[0]*RAD_2_DEG});
+  _data[Pitch].push_back({ekfEuler.timeStamp, ekfEuler.euler[1]*RAD_2_DEG});
+  _data[Yaw].push_back({ekfEuler.timeStamp, ekfEuler.euler[2]*RAD_2_DEG});
 }
 
 void SbgParser::onEComLogQuat(const SbgBinaryLogData* pLogData)
@@ -194,14 +191,12 @@ void SbgParser::onEComLogNav(const SbgBinaryLogData* pLogData)
 
   _initDone = true;
 
-  if (_data.empty()) return; // first data after init and no IMU data
-
-  _data.back().val[Lat] = ekfNav.position[0];
-  _data.back().val[Lon] = ekfNav.position[1];
-  _data.back().val[Alt] = ekfNav.position[2];
-  _data.back().val[Vn] = ekfNav.velocity[0];
-  _data.back().val[Ve] = ekfNav.velocity[1];
-  _data.back().val[Vd] = ekfNav.velocity[2];
+  _data[Lat].push_back({ekfNav.timeStamp, ekfNav.position[0]});
+  _data[Lon].push_back({ekfNav.timeStamp, ekfNav.position[1]});
+  _data[Alt].push_back({ekfNav.timeStamp, ekfNav.position[2]});
+  _data[Vn].push_back({ekfNav.timeStamp, ekfNav.velocity[0]});
+  _data[Ve].push_back({ekfNav.timeStamp, ekfNav.velocity[1]});
+  _data[Vd].push_back({ekfNav.timeStamp, ekfNav.velocity[2]});
 
   float alt = ekfNav.position[2];
   if ((_altMin < 0) || (alt < _altMin)) {
@@ -215,12 +210,20 @@ void SbgParser::onEComLogNav(const SbgBinaryLogData* pLogData)
 
 void SbgParser::onEComLogGpsPos(const SbgBinaryLogData* pLogData)
 {
-  Q_UNUSED(pLogData)
+  const SbgLogGpsPos& gpsPos = pLogData->gpsPosData;
+
+  _data[GnssLat].push_back({gpsPos.timeStamp, gpsPos.latitude});
+  _data[GnssLon].push_back({gpsPos.timeStamp, gpsPos.longitude});
+  _data[GnssAlt].push_back({gpsPos.timeStamp, gpsPos.altitude});
 }
 
 void SbgParser::onEComLogGpsVel(const SbgBinaryLogData* pLogData)
 {
-  Q_UNUSED(pLogData)
+  const SbgLogGpsVel& gpsVel = pLogData->gpsVelData;
+
+  _data[GnssVn].push_back({gpsVel.timeStamp, gpsVel.velocity[0]});
+  _data[GnssVe].push_back({gpsVel.timeStamp, gpsVel.velocity[1]});
+  _data[GnssVd].push_back({gpsVel.timeStamp, gpsVel.velocity[2]});
 }
 
 void SbgParser::onEComLogGpsHdt(const SbgBinaryLogData* pLogData)
@@ -235,8 +238,27 @@ void SbgParser::onEComLogAirData(const SbgBinaryLogData* pLogData)
 
 void SbgParser::resetUtcTimestamp()
 {
-  std::for_each(_data.begin(), _data.end(), [=](data_t& d){
-    int64_t dts = (int64_t) (d.utc - _refts) / 1000;
-    d.utc = _refutc + dts;
+  for (unsigned i = 0; i < DATA_MAX; ++i) {
+    std::for_each(_data[i].begin(), _data[i].end(), [=](data_t& d){
+      int64_t dts = (int64_t) (d.utc - _refts) / 1000;
+      d.utc = _refutc + dts;
+    });
+  }
+}
+
+void SbgParser::resetTimestamp()
+{
+  for (unsigned i = 0; i < DATA_MAX; ++i) {
+    std::for_each(_data[i].begin(), _data[i].end(), [=](data_t& d){
+      int64_t dts = (int64_t) (d.utc - _refts) / 1000;
+      d.utc = dts;
+    });
+  }
+}
+
+void SbgParser::clearData()
+{
+  std::for_each(_data.begin(), _data.end(), [=](std::vector<data_t>& d){
+    d.clear();
   });
 }

@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <string>
+#include <array>
 #include <map>
 
 class SbgParser
@@ -14,10 +15,11 @@ public:
                  Vn, Ve, Vd,
                  Dvx, Dvy, Dvz,
                  Dax, Day, Daz,
+                 GnssLat, GnssLon, GnssAlt,
+                 GnssVn, GnssVe, GnssVd,
                  DATA_MAX };
 
-  struct data_t { uint64_t utc; double val[DATA_MAX]; };
-  struct alarm_t { uint64_t ts; uint32_t nb; };
+  struct data_t { uint64_t utc; double val; };
 
 #define DATA_ID_VALID(id) (((id) >= Roll) && ((id) <= Vd))
 #define DATA_ID_INVALID(id) (((id) < Roll) || ((id) > Vd))
@@ -27,7 +29,9 @@ public:
     "lat", "lon", "alt",
     "vn", "ve", "vd",
     "delta_vx", "delta_vy", "delta_vz",
-    "delta_ax", "delta_ay", "delta_az"
+    "delta_ax", "delta_ay", "delta_az",
+    "gnss_lat", "gnss_lon", "gnss_alt",
+    "gnss_vn", "gnss_ve", "gnss_vd"
   };
 
   static constexpr data_id DATA_ID[DATA_MAX] = {
@@ -35,7 +39,9 @@ public:
     Lat, Lon, Alt,
     Vn, Ve, Vd,
     Dvx, Dvy, Dvz,
-    Dax, Day, Daz
+    Dax, Day, Daz,
+    GnssLat, GnssLon, GnssAlt,
+    GnssVn, GnssVe, GnssVd,
   };
 
 public:
@@ -46,7 +52,7 @@ public:
   void close();
 
   const std::map<std::string, std::string>& info() const { return _info; }
-  const std::vector<data_t>& data() const { return _data; }
+  const std::array<std::vector<data_t>, DATA_MAX>& data() const { return _data; }
 
 private:
   //callbacks
@@ -65,6 +71,9 @@ private:
   void onEComLogAirData(const SbgBinaryLogData* pLogData);
 
   void resetUtcTimestamp();
+  void resetTimestamp();
+
+  void clearData();
 
 private:
   //sbg interface
@@ -81,5 +90,5 @@ private:
   uint32_t _refts;
   uint64_t _refutc;
   bool _initDone;
-  std::vector<data_t> _data;
+  std::array<std::vector<data_t>, DATA_MAX> _data;
 };

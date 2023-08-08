@@ -5,6 +5,7 @@ add_definitions(${QT_DEFINITIONS})
 add_definitions(-DQT_PLUGIN)
 
 QT5_WRAP_UI ( UI_SRC
+    dataload_sbg.ui
     sbg_data_dialog.ui
     )
 
