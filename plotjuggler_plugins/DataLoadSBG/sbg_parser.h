@@ -19,7 +19,7 @@ public:
                  GnssVn, GnssVe, GnssVd,
                  DATA_MAX };
 
-  struct data_t { uint64_t utc; double val; };
+  struct data_t { uint64_t ts; double val; };
 
 #define DATA_ID_VALID(id) (((id) >= Roll) && ((id) <= Vd))
 #define DATA_ID_INVALID(id) (((id) < Roll) || ((id) > Vd))
@@ -51,7 +51,6 @@ public:
   bool open(const std::string& fileName);
   void close();
 
-  const std::map<std::string, std::string>& info() const { return _info; }
   const std::array<std::vector<data_t>, DATA_MAX>& data() const { return _data; }
 
 private:
@@ -70,9 +69,6 @@ private:
   void onEComLogGpsHdt(const SbgBinaryLogData* pLogData);
   void onEComLogAirData(const SbgBinaryLogData* pLogData);
 
-  void resetUtcTimestamp();
-  void resetTimestamp();
-
   void clearData();
 
 private:
@@ -81,14 +77,9 @@ private:
   SbgInterface _iface;
   //log info
   std::string _fileName;
-  std::string _utcStr;
-  float _altMin;
-  float _altMax;
-  float _altDelta;
-  std::map<std::string, std::string> _info;
   //log data
-  uint32_t _refts;
-  uint64_t _refutc;
-  bool _initDone;
+  uint32_t _utcTimestamp;
+  uint32_t _navTimestamp;
+  uint32_t _oldTimestamp;
   std::array<std::vector<data_t>, DATA_MAX> _data;
 };

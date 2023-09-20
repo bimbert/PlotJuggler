@@ -53,14 +53,9 @@ SbgErrorCode onEComLogReceived(SbgEComHandle*, SbgEComClass msgClass, SbgEComMsg
 
 SbgParser::SbgParser()
   : _fileName()
-  , _utcStr()
-  , _altMin(-1)
-  , _altMax(-1)
-  , _altDelta(-1)
-  , _info()
-  , _refts(0)
-  , _refutc(0)
-  , _initDone(false)
+  , _utcTimestamp(0)
+  , _navTimestamp(0)
+  , _oldTimestamp(0)
   , _data()
 {
 }
@@ -94,9 +89,9 @@ bool SbgParser::open(const std::string& fileName)
     return false;
   }
 
-  _refts = 0;
-  _refutc = 0;
-  _initDone = false;
+  _utcTimestamp = 0;
+  _navTimestamp = 0;
+  _oldTimestamp = 0;
   clearData();
 
   errorCode = sbgEComHandle(&_handle);
@@ -105,16 +100,7 @@ bool SbgParser::open(const std::string& fileName)
     return false;
   }
 
-  _info.insert({ "filename", _fileName });
-  _info.insert({ "utc", _utcStr });
-  _info.insert({ "alt.min", std::to_string(_altMin) });
-  _info.insert({ "alt.max", std::to_string(_altMax) });
-  _info.insert({ "alt.delta", std::to_string(_altDelta) });
-
-//  resetUtcTimestamp();
-  resetTimestamp();
-
-  qDebug("done - %s", _utcStr.c_str());
+  qDebug("done");
 
   return true;
 }
@@ -127,30 +113,35 @@ void SbgParser::close()
 void SbgParser::onEComLogUtc(const SbgBinaryLogData* pLogData)
 {
   const SbgLogUtcData& utcData = pLogData->utcData;
-  if ((_refts == 0) && (_refutc == 0)
-      && (sbgEComLogUtcGetClockStatus(utcData.status) == SBG_ECOM_CLOCK_VALID)
-      && (sbgEComLogUtcGetClockUtcStatus(utcData.status) == SBG_ECOM_UTC_VALID)) {
-    _refts = utcData.timeStamp;
-    _refutc = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
-                        QTime(utcData.hour, utcData.minute, utcData.second, utcData.nanoSecond/1e6),
-                        Qt::UTC).toMSecsSinceEpoch();
-    int64_t dts = (int64_t) (pLogData->utcData.timeStamp - _refts) / 1000;
-    _utcStr = QDateTime::fromMSecsSinceEpoch(_refutc - dts, Qt::UTC).toString("yyyyMMdd_hhmmss").toStdString();
+
+  bool utcValid = (sbgEComLogUtcGetClockUtcStatus(utcData.status) == SBG_ECOM_UTC_VALID);
+
+  if ((_utcTimestamp != 0) && utcValid) {
+    _utcTimestamp = utcData.timeStamp;
   }
-  if (utcData.timeStamp < _refts) {
-    qDebug("reset - %s", _utcStr.c_str());
-    _refts = 0;
-    _refutc = 0;
-    _initDone = false;
-    clearData();
+  else if ((_utcTimestamp != 0) && !utcValid) {
+    qDebug("reset");
+    _utcTimestamp = 0;
+    _navTimestamp = 0;
   }
+  else if ((_utcTimestamp != 0) && (utcData.timeStamp < _oldTimestamp)) {
+    qDebug("back");
+    _utcTimestamp = 0;
+    _navTimestamp = 0;
+  }
+  else if ((_utcTimestamp != 0) && (utcData.timeStamp > (_oldTimestamp+1.2e6))) {
+    qDebug("jump");
+    _utcTimestamp = 0;
+    _navTimestamp = 0;
+  }
+  _oldTimestamp = utcData.timeStamp;
 }
 
 void SbgParser::onEComLogShort(const SbgBinaryLogData* pLogData)
 {
   const SbgLogImuShort& imuShort = pLogData->imuShort;
 
-  if (!_initDone) return;
+  if (!_utcTimestamp && !_navTimestamp) return;
 
   _data[Dvx].push_back({imuShort.timeStamp, imuShort.deltaVelocity[0]*DELTA_VEL_LSB});
   _data[Dvy].push_back({imuShort.timeStamp, imuShort.deltaVelocity[1]*DELTA_VEL_LSB});
@@ -169,7 +160,7 @@ void SbgParser::onEComLogEuler(const SbgBinaryLogData* pLogData)
 {
   const SbgLogEkfEulerData& ekfEuler = pLogData->ekfEulerData;
 
-  if (!_initDone) return;
+  if (!_utcTimestamp && !_navTimestamp) return;
 
   _data[Roll].push_back({ekfEuler.timeStamp, ekfEuler.euler[0]*RAD_2_DEG});
   _data[Pitch].push_back({ekfEuler.timeStamp, ekfEuler.euler[1]*RAD_2_DEG});
@@ -179,17 +170,16 @@ void SbgParser::onEComLogEuler(const SbgBinaryLogData* pLogData)
 void SbgParser::onEComLogQuat(const SbgBinaryLogData* pLogData)
 {
   Q_UNUSED(pLogData)
-  if (!_initDone) return;
+  if (!_utcTimestamp && !_navTimestamp) return;
 }
 
 void SbgParser::onEComLogNav(const SbgBinaryLogData* pLogData)
 {
   const SbgLogEkfNavData& ekfNav = pLogData->ekfNavData;
 
-  if (!_initDone
-      && (sbgEComLogEkfGetSolutionMode(ekfNav.status) != SBG_ECOM_SOL_MODE_NAV_POSITION)) return;
+  bool navValid = (sbgEComLogEkfGetSolutionMode(ekfNav.status) == SBG_ECOM_SOL_MODE_NAV_POSITION);
 
-  _initDone = true;
+  if (!_utcts && !navValid) return;
 
   _data[Lat].push_back({ekfNav.timeStamp, ekfNav.position[0]});
   _data[Lon].push_back({ekfNav.timeStamp, ekfNav.position[1]});
@@ -197,20 +187,13 @@ void SbgParser::onEComLogNav(const SbgBinaryLogData* pLogData)
   _data[Vn].push_back({ekfNav.timeStamp, ekfNav.velocity[0]});
   _data[Ve].push_back({ekfNav.timeStamp, ekfNav.velocity[1]});
   _data[Vd].push_back({ekfNav.timeStamp, ekfNav.velocity[2]});
-
-  float alt = ekfNav.position[2];
-  if ((_altMin < 0) || (alt < _altMin)) {
-    _altMin = alt;
-  }
-  if ((_altMax < 0) || (alt > _altMax)) {
-    _altMax = alt;
-  }
-  _altDelta = _altMax - _altMin;
 }
 
 void SbgParser::onEComLogGpsPos(const SbgBinaryLogData* pLogData)
 {
   const SbgLogGpsPos& gpsPos = pLogData->gpsPosData;
+
+  if (!_utcTimestamp && !_navTimestamp) return;
 
   _data[GnssLat].push_back({gpsPos.timeStamp, gpsPos.latitude});
   _data[GnssLon].push_back({gpsPos.timeStamp, gpsPos.longitude});
@@ -220,6 +203,8 @@ void SbgParser::onEComLogGpsPos(const SbgBinaryLogData* pLogData)
 void SbgParser::onEComLogGpsVel(const SbgBinaryLogData* pLogData)
 {
   const SbgLogGpsVel& gpsVel = pLogData->gpsVelData;
+
+  if (!_utcTimestamp && !_navTimestamp) return;
 
   _data[GnssVn].push_back({gpsVel.timeStamp, gpsVel.velocity[0]});
   _data[GnssVe].push_back({gpsVel.timeStamp, gpsVel.velocity[1]});
@@ -234,26 +219,6 @@ void SbgParser::onEComLogGpsHdt(const SbgBinaryLogData* pLogData)
 void SbgParser::onEComLogAirData(const SbgBinaryLogData* pLogData)
 {
   Q_UNUSED(pLogData)
-}
-
-void SbgParser::resetUtcTimestamp()
-{
-  for (unsigned i = 0; i < DATA_MAX; ++i) {
-    std::for_each(_data[i].begin(), _data[i].end(), [=](data_t& d){
-      int64_t dts = (int64_t) (d.utc - _refts) / 1000;
-      d.utc = _refutc + dts;
-    });
-  }
-}
-
-void SbgParser::resetTimestamp()
-{
-  for (unsigned i = 0; i < DATA_MAX; ++i) {
-    std::for_each(_data[i].begin(), _data[i].end(), [=](data_t& d){
-      int64_t dts = (int64_t) (d.utc - _refts) / 1000;
-      d.utc = dts;
-    });
-  }
 }
 
 void SbgParser::clearData()

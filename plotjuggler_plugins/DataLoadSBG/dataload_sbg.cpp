@@ -52,15 +52,15 @@ bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
   }
 
   // populate timeseries with data
-  /*for (const auto& it : data) {
-    for (unsigned i = 0; i < SbgParser::DATA_MAX; i++) {
-      PlotData::Point point(it.utc/1000.0, it.val[i]);
-      plots_vector[i]->pushBack(point);
-    }
-  }*/
+//  for (const auto& it : data) {
+//    for (unsigned i = 0; i < SbgParser::DATA_MAX; i++) {
+//      PlotData::Point point(it.utc/1000.0, it.val[i]);
+//      plots_vector[i]->pushBack(point);
+//    }
+//  }
   for (unsigned i = 0; i < SbgParser::DATA_MAX; ++i) {
     for (const auto& it : data[i]) {
-      PlotData::Point point(it.utc/1000.0, it.val);
+      PlotData::Point point(it.ts/1000.0, it.val);
       plots_vector[i]->pushBack(point);
     }
   }
