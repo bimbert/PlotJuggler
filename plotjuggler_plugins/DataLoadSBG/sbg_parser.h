@@ -17,6 +17,7 @@ public:
                  Dax, Day, Daz,
                  GnssLat, GnssLon, GnssAlt,
                  GnssVn, GnssVe, GnssVd,
+                 BaroAlt,
                  DATA_MAX };
 
   struct data_t { uint64_t ts; double val; };
@@ -31,7 +32,8 @@ public:
     "delta_vx", "delta_vy", "delta_vz",
     "delta_ax", "delta_ay", "delta_az",
     "gnss_lat", "gnss_lon", "gnss_alt",
-    "gnss_vn", "gnss_ve", "gnss_vd"
+    "gnss_vn", "gnss_ve", "gnss_vd",
+    "baro_alt"
   };
 
   static constexpr data_id DATA_ID[DATA_MAX] = {
@@ -42,6 +44,7 @@ public:
     Dax, Day, Daz,
     GnssLat, GnssLon, GnssAlt,
     GnssVn, GnssVe, GnssVd,
+    BaroAlt
   };
 
 public:
@@ -71,7 +74,7 @@ private:
   void onEComLogAirData(const SbgBinaryLogData* pLogData);
 
   void clearData();
-
+  void addData(data_id id, uint32_t ts, double val);
   void addInfo(const std::string& key, const std::string& val);
 
 private:
