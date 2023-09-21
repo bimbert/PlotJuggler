@@ -78,7 +78,7 @@ QTabWidget::right-corner {
 }
 
 QTabWidget::tab-bar {
-    left: 0; 
+    left: 0;
 }
 
 QTabBar::tab {
@@ -585,6 +585,15 @@ QComboBox {
     padding-right: 4px;
 }
 
+QComboBox::down-arrow {
+    image: url(":/style_${theme}/arrow_down.png");
+    height: 12px;
+    width: 12px;
+}
+
+QComboBox::drop-down {
+    border-left: 1px solid ${border_default};
+}
 
 /* QSlider ---------------------------------------------------------------- */
 
@@ -667,7 +676,7 @@ QHeaderView::text{
     padding-right: 4px;
 }
 
-QHeaderView::up-arrow { 
+QHeaderView::up-arrow {
     subcontrol-position: center right;
     image: url(":/style_${theme}/arrow_up.png");
     height: 12px;
@@ -676,7 +685,7 @@ QHeaderView::up-arrow {
     padding-right: 4px;
 }
 
-QHeaderView::down-arrow { 
+QHeaderView::down-arrow {
     subcontrol-position: center right;
     image: url(":/style_${theme}/arrow_down.png");
     height: 12px;
