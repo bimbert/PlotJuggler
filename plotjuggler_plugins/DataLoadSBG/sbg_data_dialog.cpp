@@ -12,7 +12,7 @@ SbgDataDialog::SbgDataDialog(const SbgParser& parser, QWidget* parent)
   ui->setupUi(this);
   QTableWidget* table_info = ui->tableWidgetInfo;
 
-  table_info->setRowCount(parser.info().size());
+  table_info->setRowCount((int)parser.info().size());
   int row = 0;
   for (const auto& it : parser.info())
   {

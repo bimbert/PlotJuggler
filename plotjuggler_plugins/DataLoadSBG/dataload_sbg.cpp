@@ -8,7 +8,7 @@
 #include <QProgressDialog>
 #include <QMainWindow>
 #include "sbg_parser.h"
-//#include "sbg_data_dialog.h"
+#include "sbg_data_dialog.h"
 
 DataLoadSBG::DataLoadSBG()
   : _main_win(nullptr)
@@ -40,7 +40,7 @@ bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
   // create empty timeseries
   std::vector<PlotData*> plots_vector;
   for (unsigned i = 0; i < SbgParser::DATA_MAX; i++) {
-    auto it = plot_data.addNumeric(SbgParser::DATA_NAME[i]);
+    auto it = plot_data.addNumeric(std::string("sbg/")+SbgParser::DATA_NAME[i]);
     plots_vector.push_back(&(it->second));
   }
 
@@ -52,12 +52,12 @@ bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
     }
   }
 
-//  // populate dialog with info
-//  SbgDataDialog* dialog = new SbgDataDialog(parser, _main_win);
-//  dialog->setWindowTitle(QString("SBG file %1").arg(filename));
-//  dialog->setAttribute(Qt::WA_DeleteOnClose);
-//  dialog->restoreSettings();
-//  dialog->show();
+  // populate dialog with info
+  SbgDataDialog* dialog = new SbgDataDialog(parser, _main_win);
+  dialog->setWindowTitle(QString("SBG file %1").arg(filename));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  dialog->restoreSettings();
+  dialog->show();
 
   return true;
 }

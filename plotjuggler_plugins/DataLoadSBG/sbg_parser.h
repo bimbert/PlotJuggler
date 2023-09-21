@@ -51,6 +51,7 @@ public:
   bool open(const std::string& fileName);
   void close();
 
+  const std::map<std::string, std::string>& info() const { return _info; }
   const std::array<std::vector<data_t>, DATA_MAX>& data() const { return _data; }
 
 private:
@@ -71,15 +72,17 @@ private:
 
   void clearData();
 
+  void addInfo(const std::string& key, const std::string& val);
+
 private:
   //sbg interface
   SbgEComHandle _handle;
   SbgInterface _iface;
   //log info
-  std::string _fileName;
+  std::map<std::string, std::string> _info;
   //log data
   uint32_t _utcTimestamp;
   uint32_t _navTimestamp;
-  uint32_t _oldTimestamp;
+  SbgLogUtcData _lastUtcData;
   std::array<std::vector<data_t>, DATA_MAX> _data;
 };

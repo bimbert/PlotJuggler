@@ -52,10 +52,10 @@ SbgErrorCode onEComLogReceived(SbgEComHandle*, SbgEComClass msgClass, SbgEComMsg
 }
 
 SbgParser::SbgParser()
-  : _fileName()
+  : _info()
   , _utcTimestamp(0)
   , _navTimestamp(0)
-  , _oldTimestamp(0)
+  , _lastUtcData{}
   , _data()
 {
 }
@@ -69,9 +69,7 @@ bool SbgParser::open(const std::string& fileName)
 {
   SbgErrorCode errorCode = SBG_NO_ERROR;
 
-  _fileName = fileName;
-
-  errorCode = sbgInterfaceFileOpen(&_iface, _fileName.data());
+  errorCode = sbgInterfaceFileOpen(&_iface, fileName.data());
   if (errorCode != SBG_NO_ERROR) {
     qDebug("SbgParser::open() - sbgInterfaceSerialCreate error: %d", errorCode);
     return false;
@@ -91,7 +89,7 @@ bool SbgParser::open(const std::string& fileName)
 
   _utcTimestamp = 0;
   _navTimestamp = 0;
-  _oldTimestamp = 0;
+  _lastUtcData = {};
   clearData();
 
   errorCode = sbgEComHandle(&_handle);
@@ -100,7 +98,12 @@ bool SbgParser::open(const std::string& fileName)
     return false;
   }
 
-  qDebug("done");
+  QDateTime dt = QDateTime(QDate(_lastUtcData.year, _lastUtcData.month, _lastUtcData.day),
+                           QTime(_lastUtcData.hour, _lastUtcData.minute, _lastUtcData.second,
+                                 _lastUtcData.nanoSecond/1e6), Qt::UTC);
+  addInfo("end", dt.toString("yyyyMMdd_hhmmss").toStdString());
+
+  addInfo("session", "full");
 
   return true;
 }
@@ -118,20 +121,36 @@ void SbgParser::onEComLogUtc(const SbgBinaryLogData* pLogData)
 
   if (!_utcTimestamp && _navTimestamp) {
     _utcTimestamp = utcData.timeStamp;
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("begin", dt.toString("yyyyMMdd_hhmmss").toStdString());
   }
   else if (_utcTimestamp && !utcValid) {
-    qDebug("reset");
+    addInfo("session", "reset");
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("end", dt.toString("yyyyMMdd_hhmmss").toStdString());
     _navTimestamp = 0;
   }
-  else if (_utcTimestamp && (utcData.timeStamp < _oldTimestamp)) {
-    qDebug("back");
+  else if (_utcTimestamp && (utcData.timeStamp < _lastUtcData.timeStamp)) {
+    addInfo("session", "back");
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("end", dt.toString("yyyyMMdd_hhmmss").toStdString());
     _navTimestamp = 0;
   }
-  else if (_utcTimestamp && (utcData.timeStamp > (_oldTimestamp+1.2e6))) {
-    qDebug("jump");
+  else if (_utcTimestamp && (utcData.timeStamp > (_lastUtcData.timeStamp+1.2e6))) {
+    addInfo("session", "jump");
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("end", dt.toString("yyyyMMdd_hhmmss").toStdString());
     _navTimestamp = 0;
   }
-  _oldTimestamp = utcData.timeStamp;
+  _lastUtcData = utcData;
 }
 
 void SbgParser::onEComLogShort(const SbgBinaryLogData* pLogData)
@@ -236,4 +255,11 @@ void SbgParser::clearData()
   std::for_each(_data.begin(), _data.end(), [=](std::vector<data_t>& d){
     d.clear();
   });
+}
+
+void SbgParser::addInfo(const std::string& key, const std::string& val)
+{
+  if (_info.find(key) == _info.end()) {
+    _info[key] = val;
+  }
 }
