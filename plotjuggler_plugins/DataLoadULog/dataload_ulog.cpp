@@ -7,7 +7,6 @@
 #include <QSettings>
 #include <QProgressDialog>
 #include <QMainWindow>
-#include "selectlistdialog.h"
 #include "ulog_parser.h"
 #include "ulog_parameters_dialog.h"
 
@@ -47,14 +46,23 @@ bool DataLoadULog::readDataFromFile(FileLoadInfo* fileload_info,
 
   const auto& timeseries_map = parser.getTimeseriesMap();
 
+  std::string base_name = "";
+  for (const auto& param : parser.getParameters())
+  {
+    if (param.name == "MAV_SYS_ID")
+    {
+      base_name = "ulog" + std::to_string(param.value.val_int) + "/";
+    }
+  }
+
   for (const auto& it : timeseries_map)
   {
-    const std::string& sucsctiption_name = it.first;
+    const std::string& suscription_name = it.first;
     const ULogParser::Timeseries& timeseries = it.second;
 
     for (const auto& data : timeseries.data)
     {
-      std::string series_name = sucsctiption_name + data.first;
+      std::string series_name = base_name + suscription_name + data.first;
 
       auto series = plot_data.addNumeric(series_name);
 
