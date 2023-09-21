@@ -116,22 +116,19 @@ void SbgParser::onEComLogUtc(const SbgBinaryLogData* pLogData)
 
   bool utcValid = (sbgEComLogUtcGetClockUtcStatus(utcData.status) == SBG_ECOM_UTC_VALID);
 
-  if ((_utcTimestamp != 0) && utcValid) {
+  if (!_utcTimestamp && _navTimestamp) {
     _utcTimestamp = utcData.timeStamp;
   }
-  else if ((_utcTimestamp != 0) && !utcValid) {
+  else if (_utcTimestamp && !utcValid) {
     qDebug("reset");
-    _utcTimestamp = 0;
     _navTimestamp = 0;
   }
-  else if ((_utcTimestamp != 0) && (utcData.timeStamp < _oldTimestamp)) {
+  else if (_utcTimestamp && (utcData.timeStamp < _oldTimestamp)) {
     qDebug("back");
-    _utcTimestamp = 0;
     _navTimestamp = 0;
   }
-  else if ((_utcTimestamp != 0) && (utcData.timeStamp > (_oldTimestamp+1.2e6))) {
+  else if (_utcTimestamp && (utcData.timeStamp > (_oldTimestamp+1.2e6))) {
     qDebug("jump");
-    _utcTimestamp = 0;
     _navTimestamp = 0;
   }
   _oldTimestamp = utcData.timeStamp;
@@ -143,12 +140,14 @@ void SbgParser::onEComLogShort(const SbgBinaryLogData* pLogData)
 
   if (!_utcTimestamp && !_navTimestamp) return;
 
-  _data[Dvx].push_back({imuShort.timeStamp, imuShort.deltaVelocity[0]*DELTA_VEL_LSB});
-  _data[Dvy].push_back({imuShort.timeStamp, imuShort.deltaVelocity[1]*DELTA_VEL_LSB});
-  _data[Dvz].push_back({imuShort.timeStamp, imuShort.deltaVelocity[2]*DELTA_VEL_LSB});
-  _data[Dax].push_back({imuShort.timeStamp, imuShort.deltaAngle[0]*DELTA_ANG_LSB* RAD_2_DEG});
-  _data[Day].push_back({imuShort.timeStamp, imuShort.deltaAngle[1]*DELTA_ANG_LSB*RAD_2_DEG});
-  _data[Daz].push_back({imuShort.timeStamp, imuShort.deltaAngle[2]*DELTA_ANG_LSB*RAD_2_DEG});
+  if (_utcTimestamp && !_navTimestamp) return;
+
+  _data[Dvx].push_back({imuShort.timeStamp-_utcTimestamp, imuShort.deltaVelocity[0]*DELTA_VEL_LSB});
+  _data[Dvy].push_back({imuShort.timeStamp-_utcTimestamp, imuShort.deltaVelocity[1]*DELTA_VEL_LSB});
+  _data[Dvz].push_back({imuShort.timeStamp-_utcTimestamp, imuShort.deltaVelocity[2]*DELTA_VEL_LSB});
+  _data[Dax].push_back({imuShort.timeStamp-_utcTimestamp, imuShort.deltaAngle[0]*DELTA_ANG_LSB* RAD_2_DEG});
+  _data[Day].push_back({imuShort.timeStamp-_utcTimestamp, imuShort.deltaAngle[1]*DELTA_ANG_LSB*RAD_2_DEG});
+  _data[Daz].push_back({imuShort.timeStamp-_utcTimestamp, imuShort.deltaAngle[2]*DELTA_ANG_LSB*RAD_2_DEG});
 }
 
 void SbgParser::onEComLogImu(const SbgBinaryLogData* pLogData)
@@ -162,31 +161,38 @@ void SbgParser::onEComLogEuler(const SbgBinaryLogData* pLogData)
 
   if (!_utcTimestamp && !_navTimestamp) return;
 
-  _data[Roll].push_back({ekfEuler.timeStamp, ekfEuler.euler[0]*RAD_2_DEG});
-  _data[Pitch].push_back({ekfEuler.timeStamp, ekfEuler.euler[1]*RAD_2_DEG});
-  _data[Yaw].push_back({ekfEuler.timeStamp, ekfEuler.euler[2]*RAD_2_DEG});
+  if (_utcTimestamp && !_navTimestamp) return;
+
+  _data[Roll].push_back({ekfEuler.timeStamp-_utcTimestamp, ekfEuler.euler[0]*RAD_2_DEG});
+  _data[Pitch].push_back({ekfEuler.timeStamp-_utcTimestamp, ekfEuler.euler[1]*RAD_2_DEG});
+  _data[Yaw].push_back({ekfEuler.timeStamp-_utcTimestamp, ekfEuler.euler[2]*RAD_2_DEG});
 }
 
 void SbgParser::onEComLogQuat(const SbgBinaryLogData* pLogData)
 {
   Q_UNUSED(pLogData)
-  if (!_utcTimestamp && !_navTimestamp) return;
 }
 
 void SbgParser::onEComLogNav(const SbgBinaryLogData* pLogData)
 {
   const SbgLogEkfNavData& ekfNav = pLogData->ekfNavData;
 
+  if (_utcTimestamp && !_navTimestamp) return;
+
   bool navValid = (sbgEComLogEkfGetSolutionMode(ekfNav.status) == SBG_ECOM_SOL_MODE_NAV_POSITION);
 
-  if (!_utcts && !navValid) return;
+  if (!_navTimestamp && navValid) {
+    _navTimestamp = ekfNav.timeStamp;
+  }
 
-  _data[Lat].push_back({ekfNav.timeStamp, ekfNav.position[0]});
-  _data[Lon].push_back({ekfNav.timeStamp, ekfNav.position[1]});
-  _data[Alt].push_back({ekfNav.timeStamp, ekfNav.position[2]});
-  _data[Vn].push_back({ekfNav.timeStamp, ekfNav.velocity[0]});
-  _data[Ve].push_back({ekfNav.timeStamp, ekfNav.velocity[1]});
-  _data[Vd].push_back({ekfNav.timeStamp, ekfNav.velocity[2]});
+  if (!_utcTimestamp && !_navTimestamp) return;
+
+  _data[Lat].push_back({ekfNav.timeStamp-_utcTimestamp, ekfNav.position[0]});
+  _data[Lon].push_back({ekfNav.timeStamp-_utcTimestamp, ekfNav.position[1]});
+  _data[Alt].push_back({ekfNav.timeStamp-_utcTimestamp, ekfNav.position[2]});
+  _data[Vn].push_back({ekfNav.timeStamp-_utcTimestamp, ekfNav.velocity[0]});
+  _data[Ve].push_back({ekfNav.timeStamp-_utcTimestamp, ekfNav.velocity[1]});
+  _data[Vd].push_back({ekfNav.timeStamp-_utcTimestamp, ekfNav.velocity[2]});
 }
 
 void SbgParser::onEComLogGpsPos(const SbgBinaryLogData* pLogData)
@@ -195,9 +201,11 @@ void SbgParser::onEComLogGpsPos(const SbgBinaryLogData* pLogData)
 
   if (!_utcTimestamp && !_navTimestamp) return;
 
-  _data[GnssLat].push_back({gpsPos.timeStamp, gpsPos.latitude});
-  _data[GnssLon].push_back({gpsPos.timeStamp, gpsPos.longitude});
-  _data[GnssAlt].push_back({gpsPos.timeStamp, gpsPos.altitude});
+  if (_utcTimestamp && !_navTimestamp) return;
+
+  _data[GnssLat].push_back({gpsPos.timeStamp-_utcTimestamp, gpsPos.latitude});
+  _data[GnssLon].push_back({gpsPos.timeStamp-_utcTimestamp, gpsPos.longitude});
+  _data[GnssAlt].push_back({gpsPos.timeStamp-_utcTimestamp, gpsPos.altitude});
 }
 
 void SbgParser::onEComLogGpsVel(const SbgBinaryLogData* pLogData)
@@ -205,6 +213,8 @@ void SbgParser::onEComLogGpsVel(const SbgBinaryLogData* pLogData)
   const SbgLogGpsVel& gpsVel = pLogData->gpsVelData;
 
   if (!_utcTimestamp && !_navTimestamp) return;
+
+  if (_utcTimestamp && !_navTimestamp) return;
 
   _data[GnssVn].push_back({gpsVel.timeStamp, gpsVel.velocity[0]});
   _data[GnssVe].push_back({gpsVel.timeStamp, gpsVel.velocity[1]});
