@@ -4,6 +4,7 @@
 #include <QtPlugin>
 #include <QWidget>
 #include "PlotJuggler/dataloader_base.h"
+#include "ui_dataload_sbg.h"
 
 using namespace PJ;
 
@@ -23,7 +24,10 @@ public:
 
   ~DataLoadSBG() override;
 
-  const char* name() const override { return "DataLoad SBG"; }
+  const char* name() const override
+  {
+    return "DataLoad SBG";
+  }
 
   bool xmlSaveState(QDomDocument& doc, QDomElement& parent_element) const override;
 
@@ -32,4 +36,9 @@ public:
 private:
   std::string _default_time_axis;
   QWidget* _main_win;
+
+  QDialog* _dialog;
+  Ui::DataLoadSBG* _ui;
+
+  int _id;
 };

@@ -12,6 +12,9 @@
 
 DataLoadSBG::DataLoadSBG()
   : _main_win(nullptr)
+  , _dialog(new QDialog())
+  , _ui(new Ui::DataLoadSBG())
+  , _id(0)
 {
   for (QWidget* widget : qApp->topLevelWidgets()) {
     if (widget->inherits("QMainWindow")) {
@@ -19,6 +22,11 @@ DataLoadSBG::DataLoadSBG()
       break;
     }
   }
+
+  _ui->setupUi(_dialog);
+
+  connect(_ui->sourceIdComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          [=](int index){ _id = index+1; });
 }
 
 const std::vector<const char*>& DataLoadSBG::compatibleFileExtensions() const
@@ -30,6 +38,17 @@ const std::vector<const char*>& DataLoadSBG::compatibleFileExtensions() const
 bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
                                    PlotDataMapRef& plot_data)
 {
+  QSettings settings;
+  _dialog->restoreGeometry(settings.value("DataLoadSBG.geometry").toByteArray());
+
+  int res = _dialog->exec();
+
+  settings.setValue("DataLoadSBG.geometry", _dialog->saveGeometry());
+
+  if (res == QDialog::Rejected) {
+    return false;
+  }
+
   const auto& filename = fileload_info->filename;
 
   SbgParser parser;
@@ -40,7 +59,8 @@ bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
   // create empty timeseries
   std::vector<PlotData*> plots_vector;
   for (unsigned i = 0; i < SbgParser::DATA_MAX; i++) {
-    auto it = plot_data.addNumeric(std::string("sbg/")+SbgParser::DATA_NAME[i]);
+    auto it = plot_data.addNumeric(std::string("sbg")+std::to_string(_id)
+                                   +"/"+SbgParser::DATA_NAME[i]);
     plots_vector.push_back(&(it->second));
   }
 
@@ -64,6 +84,8 @@ bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
 
 DataLoadSBG::~DataLoadSBG()
 {
+  delete _ui;
+  delete _dialog;
 }
 
 bool DataLoadSBG::xmlSaveState(QDomDocument& doc, QDomElement& parent_element) const
