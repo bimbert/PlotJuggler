@@ -52,15 +52,10 @@ SbgErrorCode onEComLogReceived(SbgEComHandle*, SbgEComClass msgClass, SbgEComMsg
 }
 
 SbgParser::SbgParser()
-  : _fileName()
-  , _utcStr()
-  , _altMin(-1)
-  , _altMax(-1)
-  , _altDelta(-1)
-  , _info()
-  , _refts(0)
-  , _refutc(0)
-  , _initDone(false)
+  : _info()
+  , _utcTimestamp(0)
+  , _navTimestamp(0)
+  , _lastUtcData{}
   , _data()
 {
 }
@@ -74,9 +69,7 @@ bool SbgParser::open(const std::string& fileName)
 {
   SbgErrorCode errorCode = SBG_NO_ERROR;
 
-  _fileName = fileName;
-
-  errorCode = sbgInterfaceFileOpen(&_iface, _fileName.data());
+  errorCode = sbgInterfaceFileOpen(&_iface, fileName.data());
   if (errorCode != SBG_NO_ERROR) {
     qDebug("SbgParser::open() - sbgInterfaceSerialCreate error: %d", errorCode);
     return false;
@@ -94,10 +87,10 @@ bool SbgParser::open(const std::string& fileName)
     return false;
   }
 
-  _refts = 0;
-  _refutc = 0;
-  _initDone = false;
-  _data.clear();
+  _utcTimestamp = 0;
+  _navTimestamp = 0;
+  _lastUtcData = {};
+  clearData();
 
   errorCode = sbgEComHandle(&_handle);
   if ((errorCode != SBG_NO_ERROR) && (errorCode != SBG_NOT_READY)) {
@@ -105,15 +98,12 @@ bool SbgParser::open(const std::string& fileName)
     return false;
   }
 
-  _info.insert({ "filename", _fileName });
-  _info.insert({ "utc", _utcStr });
-  _info.insert({ "alt.min", std::to_string(_altMin) });
-  _info.insert({ "alt.max", std::to_string(_altMax) });
-  _info.insert({ "alt.delta", std::to_string(_altDelta) });
+  QDateTime dt = QDateTime(QDate(_lastUtcData.year, _lastUtcData.month, _lastUtcData.day),
+                           QTime(_lastUtcData.hour, _lastUtcData.minute, _lastUtcData.second,
+                                 _lastUtcData.nanoSecond/1e6), Qt::UTC);
+  addInfo("stop", dt.toString("yyyyMMdd_hhmmss").toStdString());
 
-  resetUtcTimestamp();
-
-  qDebug("done - %s", _utcStr.c_str());
+  addInfo("session", "full");
 
   return true;
 }
@@ -126,39 +116,57 @@ void SbgParser::close()
 void SbgParser::onEComLogUtc(const SbgBinaryLogData* pLogData)
 {
   const SbgLogUtcData& utcData = pLogData->utcData;
-  if ((_refts == 0) && (_refutc == 0)
-      && (sbgEComLogUtcGetClockStatus(utcData.status) == SBG_ECOM_CLOCK_VALID)
-      && (sbgEComLogUtcGetClockUtcStatus(utcData.status) == SBG_ECOM_UTC_VALID)) {
-    _refts = utcData.timeStamp;
-    _refutc = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
-                        QTime(utcData.hour, utcData.minute, utcData.second, utcData.nanoSecond/1e6),
-                        Qt::UTC).toMSecsSinceEpoch();
-    int64_t dts = (int64_t) (pLogData->utcData.timeStamp - _refts) / 1000;
-    _utcStr = QDateTime::fromMSecsSinceEpoch(_refutc - dts, Qt::UTC).toString("yyyyMMdd_hhmmss").toStdString();
+
+  bool utcValid = (sbgEComLogUtcGetClockUtcStatus(utcData.status) == SBG_ECOM_UTC_VALID);
+
+  if (!_utcTimestamp && _navTimestamp) {
+    _utcTimestamp = utcData.timeStamp;
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("start", dt.toString("yyyyMMdd_hhmmss").toStdString());
   }
-  if (utcData.timeStamp < _refts) {
-    qDebug("reset - %s", _utcStr.c_str());
-    _refts = 0;
-    _refutc = 0;
-    _initDone = false;
-    _data.clear();
+  else if (_utcTimestamp && !utcValid) {
+    addInfo("session", "reset");
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("stop", dt.toString("yyyyMMdd_hhmmss").toStdString());
+    _navTimestamp = 0;
   }
+  else if (_utcTimestamp && (utcData.timeStamp < _lastUtcData.timeStamp)) {
+    addInfo("session", "back");
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("stop", dt.toString("yyyyMMdd_hhmmss").toStdString());
+    _navTimestamp = 0;
+  }
+  else if (_utcTimestamp && (utcData.timeStamp > (_lastUtcData.timeStamp+1.2e6))) {
+    addInfo("session", "jump");
+    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+                             QTime(utcData.hour, utcData.minute, utcData.second,
+                                   utcData.nanoSecond/1e6), Qt::UTC);
+    addInfo("stop", dt.toString("yyyyMMdd_hhmmss").toStdString());
+    _navTimestamp = 0;
+  }
+  _lastUtcData = utcData;
 }
 
 void SbgParser::onEComLogShort(const SbgBinaryLogData* pLogData)
 {
   const SbgLogImuShort& imuShort = pLogData->imuShort;
 
-  if (!_initDone) return;
+  if (!_utcTimestamp && !_navTimestamp) return; // not started
 
-  if (_data.empty()) return; // first data after init and no IMU data
+  if (_utcTimestamp && !_navTimestamp) return;  // stopped
 
-  _data.back().val[Dvx] = imuShort.deltaVelocity[0]*DELTA_VEL_LSB;
-  _data.back().val[Dvy] = imuShort.deltaVelocity[1]*DELTA_VEL_LSB;
-  _data.back().val[Dvz] = imuShort.deltaVelocity[2]*DELTA_VEL_LSB;
-  _data.back().val[Dax] = imuShort.deltaAngle[0]*DELTA_ANG_LSB* RAD_2_DEG;
-  _data.back().val[Day] = imuShort.deltaAngle[1]*DELTA_ANG_LSB*RAD_2_DEG;
-  _data.back().val[Daz] = imuShort.deltaAngle[2]*DELTA_ANG_LSB*RAD_2_DEG;
+  addData(Dvx, imuShort.timeStamp, imuShort.deltaVelocity[0]*DELTA_VEL_LSB);
+  addData(Dvy, imuShort.timeStamp, imuShort.deltaVelocity[1]*DELTA_VEL_LSB);
+  addData(Dvz, imuShort.timeStamp, imuShort.deltaVelocity[2]*DELTA_VEL_LSB);
+  addData(Dax, imuShort.timeStamp, imuShort.deltaAngle[0]*DELTA_ANG_LSB* RAD_2_DEG);
+  addData(Day, imuShort.timeStamp, imuShort.deltaAngle[1]*DELTA_ANG_LSB*RAD_2_DEG);
+  addData(Daz, imuShort.timeStamp, imuShort.deltaAngle[2]*DELTA_ANG_LSB*RAD_2_DEG);
 }
 
 void SbgParser::onEComLogImu(const SbgBinaryLogData* pLogData)
@@ -170,57 +178,66 @@ void SbgParser::onEComLogEuler(const SbgBinaryLogData* pLogData)
 {
   const SbgLogEkfEulerData& ekfEuler = pLogData->ekfEulerData;
 
-  if (!_initDone) return;
+  if (!_utcTimestamp && !_navTimestamp) return; // not started
 
-  _data.push_back({ekfEuler.timeStamp,{}});
+  if (_utcTimestamp && !_navTimestamp) return;  // stopped
 
-  _data.back().val[Roll] = ekfEuler.euler[0]*RAD_2_DEG;
-  _data.back().val[Pitch] = ekfEuler.euler[1]*RAD_2_DEG;
-  _data.back().val[Yaw] = ekfEuler.euler[2]*RAD_2_DEG;
+  addData(Roll, ekfEuler.timeStamp, ekfEuler.euler[0]*RAD_2_DEG);
+  addData(Pitch, ekfEuler.timeStamp, ekfEuler.euler[1]*RAD_2_DEG);
+  addData(Yaw, ekfEuler.timeStamp, ekfEuler.euler[2]*RAD_2_DEG);
 }
 
 void SbgParser::onEComLogQuat(const SbgBinaryLogData* pLogData)
 {
   Q_UNUSED(pLogData)
-  if (!_initDone) return;
 }
 
 void SbgParser::onEComLogNav(const SbgBinaryLogData* pLogData)
 {
   const SbgLogEkfNavData& ekfNav = pLogData->ekfNavData;
 
-  if (!_initDone
-      && (sbgEComLogEkfGetSolutionMode(ekfNav.status) != SBG_ECOM_SOL_MODE_NAV_POSITION)) return;
+  if (_utcTimestamp && !_navTimestamp) return;  // stopped (here to prevent restart)
 
-  _initDone = true;
+  bool navValid = (sbgEComLogEkfGetSolutionMode(ekfNav.status) == SBG_ECOM_SOL_MODE_NAV_POSITION);
 
-  if (_data.empty()) return; // first data after init and no IMU data
-
-  _data.back().val[Lat] = ekfNav.position[0];
-  _data.back().val[Lon] = ekfNav.position[1];
-  _data.back().val[Alt] = ekfNav.position[2];
-  _data.back().val[Vn] = ekfNav.velocity[0];
-  _data.back().val[Ve] = ekfNav.velocity[1];
-  _data.back().val[Vd] = ekfNav.velocity[2];
-
-  float alt = ekfNav.position[2];
-  if ((_altMin < 0) || (alt < _altMin)) {
-    _altMin = alt;
+  if (!_navTimestamp && navValid) {
+    _navTimestamp = ekfNav.timeStamp;
   }
-  if ((_altMax < 0) || (alt > _altMax)) {
-    _altMax = alt;
-  }
-  _altDelta = _altMax - _altMin;
+
+  if (!_utcTimestamp && !_navTimestamp) return; // not started
+
+  addData(Lat, ekfNav.timeStamp, ekfNav.position[0]);
+  addData(Lon, ekfNav.timeStamp, ekfNav.position[1]);
+  addData(Alt, ekfNav.timeStamp, ekfNav.position[2]);
+  addData(Vn, ekfNav.timeStamp, ekfNav.velocity[0]);
+  addData(Ve, ekfNav.timeStamp, ekfNav.velocity[1]);
+  addData(Vd, ekfNav.timeStamp, ekfNav.velocity[2]);
 }
 
 void SbgParser::onEComLogGpsPos(const SbgBinaryLogData* pLogData)
 {
-  Q_UNUSED(pLogData)
+  const SbgLogGpsPos& gpsPos = pLogData->gpsPosData;
+
+  if (!_utcTimestamp && !_navTimestamp) return; // not started
+
+  if (_utcTimestamp && !_navTimestamp) return;  // stopped
+
+  addData(GnssLat, gpsPos.timeStamp, gpsPos.latitude);
+  addData(GnssLon, gpsPos.timeStamp, gpsPos.longitude);
+  addData(GnssAlt, gpsPos.timeStamp, gpsPos.altitude);
 }
 
 void SbgParser::onEComLogGpsVel(const SbgBinaryLogData* pLogData)
 {
-  Q_UNUSED(pLogData)
+  const SbgLogGpsVel& gpsVel = pLogData->gpsVelData;
+
+  if (!_utcTimestamp && !_navTimestamp) return; // not started
+
+  if (_utcTimestamp && !_navTimestamp) return;  // stopped
+
+  addData(GnssVn, gpsVel.timeStamp, gpsVel.velocity[0]);
+  addData(GnssVe, gpsVel.timeStamp, gpsVel.velocity[1]);
+  addData(GnssVd, gpsVel.timeStamp, gpsVel.velocity[2]);
 }
 
 void SbgParser::onEComLogGpsHdt(const SbgBinaryLogData* pLogData)
@@ -230,13 +247,30 @@ void SbgParser::onEComLogGpsHdt(const SbgBinaryLogData* pLogData)
 
 void SbgParser::onEComLogAirData(const SbgBinaryLogData* pLogData)
 {
-  Q_UNUSED(pLogData)
+  const SbgLogAirData& airData = pLogData->airData;
+
+  if (!_utcTimestamp && !_navTimestamp) return; // not started
+
+  if (_utcTimestamp && !_navTimestamp) return;  // stopped
+
+  addData(BaroAlt, airData.timeStamp, airData.altitude);
 }
 
-void SbgParser::resetUtcTimestamp()
+void SbgParser::clearData()
 {
-  std::for_each(_data.begin(), _data.end(), [=](data_t& d){
-    int64_t dts = (int64_t) (d.utc - _refts) / 1000;
-    d.utc = _refutc + dts;
+  std::for_each(_data.begin(), _data.end(), [=](std::vector<data_t>& d){
+    d.clear();
   });
+}
+
+inline void SbgParser::addData(data_id id, uint32_t ts, double val)
+{
+  _data[id].push_back({ts-_utcTimestamp, val});
+}
+
+void SbgParser::addInfo(const std::string& key, const std::string& val)
+{
+  if (_info.find(key) == _info.end()) {
+    _info[key] = val;
+  }
 }

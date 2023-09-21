@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <string>
+#include <array>
 #include <map>
 
 class SbgParser
@@ -14,10 +15,12 @@ public:
                  Vn, Ve, Vd,
                  Dvx, Dvy, Dvz,
                  Dax, Day, Daz,
+                 GnssLat, GnssLon, GnssAlt,
+                 GnssVn, GnssVe, GnssVd,
+                 BaroAlt,
                  DATA_MAX };
 
-  struct data_t { uint64_t utc; double val[DATA_MAX]; };
-  struct alarm_t { uint64_t ts; uint32_t nb; };
+  struct data_t { uint64_t ts; double val; };
 
 #define DATA_ID_VALID(id) (((id) >= Roll) && ((id) <= Vd))
 #define DATA_ID_INVALID(id) (((id) < Roll) || ((id) > Vd))
@@ -27,7 +30,10 @@ public:
     "lat", "lon", "alt",
     "vn", "ve", "vd",
     "delta_vx", "delta_vy", "delta_vz",
-    "delta_ax", "delta_ay", "delta_az"
+    "delta_ax", "delta_ay", "delta_az",
+    "gnss_lat", "gnss_lon", "gnss_alt",
+    "gnss_vn", "gnss_ve", "gnss_vd",
+    "baro_alt"
   };
 
   static constexpr data_id DATA_ID[DATA_MAX] = {
@@ -35,7 +41,10 @@ public:
     Lat, Lon, Alt,
     Vn, Ve, Vd,
     Dvx, Dvy, Dvz,
-    Dax, Day, Daz
+    Dax, Day, Daz,
+    GnssLat, GnssLon, GnssAlt,
+    GnssVn, GnssVe, GnssVd,
+    BaroAlt
   };
 
 public:
@@ -46,7 +55,7 @@ public:
   void close();
 
   const std::map<std::string, std::string>& info() const { return _info; }
-  const std::vector<data_t>& data() const { return _data; }
+  const std::array<std::vector<data_t>, DATA_MAX>& data() const { return _data; }
 
 private:
   //callbacks
@@ -64,22 +73,19 @@ private:
   void onEComLogGpsHdt(const SbgBinaryLogData* pLogData);
   void onEComLogAirData(const SbgBinaryLogData* pLogData);
 
-  void resetUtcTimestamp();
+  void clearData();
+  void addData(data_id id, uint32_t ts, double val);
+  void addInfo(const std::string& key, const std::string& val);
 
 private:
   //sbg interface
   SbgEComHandle _handle;
   SbgInterface _iface;
   //log info
-  std::string _fileName;
-  std::string _utcStr;
-  float _altMin;
-  float _altMax;
-  float _altDelta;
   std::map<std::string, std::string> _info;
   //log data
-  uint32_t _refts;
-  uint64_t _refutc;
-  bool _initDone;
-  std::vector<data_t> _data;
+  uint32_t _utcTimestamp;
+  uint32_t _navTimestamp;
+  SbgLogUtcData _lastUtcData;
+  std::array<std::vector<data_t>, DATA_MAX> _data;
 };

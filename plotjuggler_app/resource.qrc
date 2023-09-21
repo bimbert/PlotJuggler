@@ -315,5 +315,6 @@
         <file>resources/memes/meme_88.jpg</file>
         <file>resources/memes/meme_89.jpg</file>
         <file>cheatsheet/img/tutorial_colormap.png</file>
+        <file>style_light/transparent.png</file>
     </qresource>
 </RCC>
