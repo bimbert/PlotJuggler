@@ -294,7 +294,6 @@ class PopupMenu : public QMenu
 public:
   explicit PopupMenu(QWidget* relative_widget, QWidget* parent = nullptr);
 
-  void showEvent(QShowEvent*) override;
   void leaveEvent(QEvent*) override;
   void closeEvent(QCloseEvent*) override;
 

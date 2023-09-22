@@ -3360,13 +3360,6 @@ PopupMenu::PopupMenu(QWidget* relative_widget, QWidget* parent)
 {
 }
 
-void PopupMenu::showEvent(QShowEvent*)
-{
-  QPoint p = _w->mapToGlobal({});
-  QRect geo = _w->geometry();
-  this->move(p.x() + geo.width(), p.y());
-}
-
 void PopupMenu::leaveEvent(QEvent*)
 {
   close();
@@ -3385,7 +3378,8 @@ void MainWindow::on_buttonRecentData_clicked()
   {
     menu->addAction(action);
   }
-  menu->exec();
+  QPoint pos(ui->buttonRecentData->width(),0);
+  menu->exec(ui->buttonRecentData->mapToGlobal(pos));
 }
 
 void MainWindow::on_buttonStreamingOptions_clicked()
@@ -3442,7 +3436,8 @@ void MainWindow::on_buttonRecentLayout_clicked()
   {
     menu->addAction(action);
   }
-  menu->exec();
+  QPoint pos(ui->buttonRecentLayout->width(),0);
+  menu->exec(ui->buttonRecentLayout->mapToGlobal(pos));
 }
 
 QStringList MainWindow::readAllCurvesFromXML(QDomElement root_node)
