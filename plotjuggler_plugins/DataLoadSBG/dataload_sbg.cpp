@@ -27,6 +27,8 @@ DataLoadSBG::DataLoadSBG()
 
   connect(_ui->sourceIdComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
           [=](int index){ _id = index+1; });
+
+  _id = _ui->sourceIdComboBox->currentIndex()+1;
 }
 
 const std::vector<const char*>& DataLoadSBG::compatibleFileExtensions() const
