@@ -160,8 +160,8 @@ bool NeoParser::parseNeo(std::ifstream& ifs)
             // good header, extract message bytes and fill data
             new_message = true;
             uint32_t timestamp = extract_uint32(buffer, neo_log_timestamp);
-            uint16_t data_raw = extract_uint16(buffer, neo_log_distance);
-            addData(Agl, timestamp, data_raw*neo_log_data_lsb);
+            uint16_t distance = extract_uint16(buffer, neo_log_distance);
+            addData(Agl, timestamp, distance*neo_log_data_lsb);
             // remove decoded bytes
             int n = 0;
             do {
