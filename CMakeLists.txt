@@ -261,10 +261,11 @@ add_subdirectory( plotjuggler_app )
 
 add_subdirectory( plotjuggler_plugins/DataLoadCSV )
 add_subdirectory( plotjuggler_plugins/DataLoadMCAP )
+add_subdirectory( plotjuggler_plugins/DataLoadNeo )
 add_subdirectory( plotjuggler_plugins/DataLoadParquet )
 add_subdirectory( plotjuggler_plugins/DataLoadSBG )
 add_subdirectory( plotjuggler_plugins/DataLoadULog )
-add_subdirectory( plotjuggler_plugins/DataLoadZR )
+#add_subdirectory( plotjuggler_plugins/DataLoadZR )
 
 add_subdirectory( plotjuggler_plugins/DataStreamSample )
 add_subdirectory( plotjuggler_plugins/DataStreamWebsocket )
