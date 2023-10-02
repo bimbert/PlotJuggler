@@ -30,7 +30,6 @@ private:
   void addInfo(const std::string& key, const std::string& val);
 
   bool parseNeo(std::ifstream& ifs);
-  bool parseUsd1(std::ifstream& ifs);
 
 private:
   //log interface
