@@ -57,6 +57,9 @@ public:
   const std::map<std::string, std::string>& info() const { return _info; }
   const std::array<std::vector<data_t>, DATA_MAX>& data() const { return _data; }
 
+  uint32_t utcTimestamp() const { return _utcTimestamp; }
+  uint64_t utcReference() const { return _utcReference; }
+
 private:
   //callbacks
   friend SbgErrorCode onEComLogReceived(SbgEComHandle*, SbgEComClass msgClass, SbgEComMsgId msg,
@@ -77,6 +80,8 @@ private:
   void addData(data_id id, uint32_t ts, double val);
   void addInfo(const std::string& key, const std::string& val);
 
+//  void resetTimestamp();
+
 private:
   //sbg interface
   SbgEComHandle _handle;
@@ -85,6 +90,7 @@ private:
   std::map<std::string, std::string> _info;
   //log data
   uint32_t _utcTimestamp;
+  uint64_t _utcReference;
   uint32_t _navTimestamp;
   SbgLogUtcData _lastUtcData;
   std::array<std::vector<data_t>, DATA_MAX> _data;

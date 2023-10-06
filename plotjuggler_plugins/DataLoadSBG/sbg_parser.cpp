@@ -26,26 +26,26 @@ SbgErrorCode onEComLogReceived(SbgEComHandle*, SbgEComClass msgClass, SbgEComMsg
   switch (msg) {
     case SBG_ECOM_LOG_UTC_TIME: owner->onEComLogUtc(pLogData);
       break;
-  case SBG_ECOM_LOG_IMU_SHORT: owner->onEComLogShort(pLogData);
-    break;
-  case SBG_ECOM_LOG_IMU_DATA: owner->onEComLogImu(pLogData);
-    break;
-  case SBG_ECOM_LOG_EKF_EULER: owner->onEComLogEuler(pLogData);
-    break;
-  case SBG_ECOM_LOG_EKF_QUAT: owner->onEComLogQuat(pLogData);
-    break;
-  case SBG_ECOM_LOG_EKF_NAV: owner->onEComLogNav(pLogData);
-    break;
-  case SBG_ECOM_LOG_GPS1_VEL: owner->onEComLogGpsVel(pLogData);
-    break;
-  case SBG_ECOM_LOG_GPS1_POS: owner->onEComLogGpsPos(pLogData);
-    break;
-  case SBG_ECOM_LOG_GPS1_HDT: owner->onEComLogGpsHdt(pLogData);
-    break;
-  case SBG_ECOM_LOG_AIR_DATA: owner->onEComLogAirData(pLogData);
-    break;
-  default:
-    break;
+    case SBG_ECOM_LOG_IMU_SHORT: owner->onEComLogShort(pLogData);
+      break;
+    case SBG_ECOM_LOG_IMU_DATA: owner->onEComLogImu(pLogData);
+      break;
+    case SBG_ECOM_LOG_EKF_EULER: owner->onEComLogEuler(pLogData);
+      break;
+    case SBG_ECOM_LOG_EKF_QUAT: owner->onEComLogQuat(pLogData);
+      break;
+    case SBG_ECOM_LOG_EKF_NAV: owner->onEComLogNav(pLogData);
+      break;
+    case SBG_ECOM_LOG_GPS1_VEL: owner->onEComLogGpsVel(pLogData);
+      break;
+    case SBG_ECOM_LOG_GPS1_POS: owner->onEComLogGpsPos(pLogData);
+      break;
+    case SBG_ECOM_LOG_GPS1_HDT: owner->onEComLogGpsHdt(pLogData);
+      break;
+    case SBG_ECOM_LOG_AIR_DATA: owner->onEComLogAirData(pLogData);
+      break;
+    default:
+      break;
   }
 
   return SBG_NO_ERROR;
@@ -54,6 +54,7 @@ SbgErrorCode onEComLogReceived(SbgEComHandle*, SbgEComClass msgClass, SbgEComMsg
 SbgParser::SbgParser()
   : _info()
   , _utcTimestamp(0)
+  , _utcReference(0)
   , _navTimestamp(0)
   , _lastUtcData{}
   , _data()
@@ -88,6 +89,7 @@ bool SbgParser::open(const std::string& fileName)
   }
 
   _utcTimestamp = 0;
+  _utcReference = 0;
   _navTimestamp = 0;
   _lastUtcData = {};
   clearData();
@@ -98,12 +100,14 @@ bool SbgParser::open(const std::string& fileName)
     return false;
   }
 
-  QDateTime dt = QDateTime(QDate(_lastUtcData.year, _lastUtcData.month, _lastUtcData.day),
+  QDateTime tp = QDateTime(QDate(_lastUtcData.year, _lastUtcData.month, _lastUtcData.day),
                            QTime(_lastUtcData.hour, _lastUtcData.minute, _lastUtcData.second,
                                  _lastUtcData.nanoSecond/1e6), Qt::UTC);
-  addInfo("stop", dt.toString("yyyyMMdd_hhmmss").toStdString());
+  addInfo("stop", tp.toString("yyyyMMdd_hhmmss").toStdString());
 
   addInfo("session", "full");
+
+//  resetTimestamp();
 
   return true;
 }
@@ -121,10 +125,11 @@ void SbgParser::onEComLogUtc(const SbgBinaryLogData* pLogData)
 
   if (!_utcTimestamp && _navTimestamp) {
     _utcTimestamp = utcData.timeStamp;
-    QDateTime dt = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
+    QDateTime tp = QDateTime(QDate(utcData.year, utcData.month, utcData.day),
                              QTime(utcData.hour, utcData.minute, utcData.second,
                                    utcData.nanoSecond/1e6), Qt::UTC);
-    addInfo("start", dt.toString("yyyyMMdd_hhmmss").toStdString());
+    addInfo("start", tp.toString("yyyyMMdd_hhmmss").toStdString());
+    _utcReference = tp.toMSecsSinceEpoch();
   }
   else if (_utcTimestamp && !utcValid) {
     addInfo("session", "reset");
@@ -157,7 +162,7 @@ void SbgParser::onEComLogShort(const SbgBinaryLogData* pLogData)
 {
   const SbgLogImuShort& imuShort = pLogData->imuShort;
 
-  if (!_utcTimestamp && !_navTimestamp) return; // not started
+  if (!_utcTimestamp) return; // not started
 
   if (_utcTimestamp && !_navTimestamp) return;  // stopped
 
@@ -178,7 +183,7 @@ void SbgParser::onEComLogEuler(const SbgBinaryLogData* pLogData)
 {
   const SbgLogEkfEulerData& ekfEuler = pLogData->ekfEulerData;
 
-  if (!_utcTimestamp && !_navTimestamp) return; // not started
+  if (!_utcTimestamp) return; // not started
 
   if (_utcTimestamp && !_navTimestamp) return;  // stopped
 
@@ -204,7 +209,7 @@ void SbgParser::onEComLogNav(const SbgBinaryLogData* pLogData)
     _navTimestamp = ekfNav.timeStamp;
   }
 
-  if (!_utcTimestamp && !_navTimestamp) return; // not started
+  if (!_utcTimestamp) return; // not started
 
   addData(Lat, ekfNav.timeStamp, ekfNav.position[0]);
   addData(Lon, ekfNav.timeStamp, ekfNav.position[1]);
@@ -218,7 +223,7 @@ void SbgParser::onEComLogGpsPos(const SbgBinaryLogData* pLogData)
 {
   const SbgLogGpsPos& gpsPos = pLogData->gpsPosData;
 
-  if (!_utcTimestamp && !_navTimestamp) return; // not started
+  if (!_utcTimestamp) return; // not started
 
   if (_utcTimestamp && !_navTimestamp) return;  // stopped
 
@@ -231,7 +236,7 @@ void SbgParser::onEComLogGpsVel(const SbgBinaryLogData* pLogData)
 {
   const SbgLogGpsVel& gpsVel = pLogData->gpsVelData;
 
-  if (!_utcTimestamp && !_navTimestamp) return; // not started
+  if (!_utcTimestamp) return; // not started
 
   if (_utcTimestamp && !_navTimestamp) return;  // stopped
 
@@ -249,7 +254,7 @@ void SbgParser::onEComLogAirData(const SbgBinaryLogData* pLogData)
 {
   const SbgLogAirData& airData = pLogData->airData;
 
-  if (!_utcTimestamp && !_navTimestamp) return; // not started
+  if (!_utcTimestamp) return; // not started
 
   if (_utcTimestamp && !_navTimestamp) return;  // stopped
 
@@ -265,7 +270,7 @@ void SbgParser::clearData()
 
 inline void SbgParser::addData(data_id id, uint32_t ts, double val)
 {
-  _data[id].push_back({ts-_utcTimestamp, val});
+  _data[id].push_back({ts, val});
 }
 
 void SbgParser::addInfo(const std::string& key, const std::string& val)
@@ -274,3 +279,13 @@ void SbgParser::addInfo(const std::string& key, const std::string& val)
     _info[key] = val;
   }
 }
+
+//void SbgParser::resetTimestamp()
+//{
+//  std::for_each(_data.begin(), _data.end(), [=](std::vector<data_t>& data){
+//    std::for_each(data.begin(), data.end(), [=](data_t& d){
+//      int64_t dts = (int64_t) (d.ts - _utcTimestamp);
+//      d.ts = _utcReference + dts;
+//    });
+//  });
+//}

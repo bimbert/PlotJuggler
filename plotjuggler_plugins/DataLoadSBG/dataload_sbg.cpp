@@ -67,9 +67,13 @@ bool DataLoadSBG::readDataFromFile(FileLoadInfo* fileload_info,
   }
 
   // populate timeseries with data
+  uint32_t ts_utc = parser.utcTimestamp();
+  uint64_t ts_ref = parser.utcReference();
   for (unsigned i = 0; i < SbgParser::DATA_MAX; ++i) {
     for (const auto& it : data[i]) {
-      PlotData::Point point(it.ts*1e-6, it.val);
+      int64_t dts = (int64_t) (it.ts - ts_utc) / 1000;
+      uint64_t ts = ts_ref + dts;
+      PlotData::Point point(ts*1e-3, it.val);
       plots_vector[i]->pushBack(point);
     }
   }
